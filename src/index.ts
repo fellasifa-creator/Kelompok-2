@@ -355,6 +355,151 @@ async function ubahData(): Promise<void> {
     console.log("\n[OK] Data berhasil diubah.");
     tampilkanDetail(daftarTiket[index]!);
   } else {
+
+    
     console.log(`[!] Data dengan ID ${id} tidak ditemukan.`);
   }
 }
+
+// Fungsi dengan parameter dan return number: menentukan harga berdasar film
+function tentukanHarga(jenisFilm: string): number {
+  let harga: number = 0; // nilai awal bila film tidak dikenal
+  // switch dengan 3 case + default untuk memilih harga sesuai jenis film
+  switch (jenisFilm) {
+    case "Action":
+      harga = HARGA_ACTION; // film Action
+      break;
+    case "Comedy":
+      harga = HARGA_COMEDY; // film Comedy
+      break;
+    case "Horror":
+      harga = HARGA_HORROR; // film Horror
+      break;
+    default:
+      break; // film tidak dikenal, harga tetap 0
+  }
+  return harga; // kembalikan harga tiket
+}
+
+// Fungsi return number: menghitung diskon berdasar jumlah tiket & status member
+function hitungDiskon(total: number, jumlah: number, member: boolean): number {
+  let persen: number = 0; // persentase diskon, awalnya 0 (tanpa diskon)
+  // if majemuk (operator && ): 3 tiket atau lebih dan member -> diskon 10%
+  if (jumlah >= 3 && member) {
+    persen = 0.1;
+  } else if (jumlah >= 3 && !member) {
+    // 3 tiket atau lebih tetapi bukan member -> diskon 5%
+    persen = 0.05;
+  }
+  return total * persen; // diskon = total x persentase
+}
+
+// Fungsi return number: menghitung total bayar memakai operator compound
+function hitungTotalBayar(total: number, diskon: number): number {
+  let bayar: number = total; // mulai dari total harga
+  bayar -= diskon; // compound -= : kurangi dengan diskon
+  bayar += BIAYA_LAYANAN; // compound += : tambah biaya layanan
+  return bayar; // kembalikan total yang harus dibayar
+}
+
+// Arrow function: mengubah angka menjadi format rupiah, contoh Rp40.000
+const formatRupiah = (angka: number): string => {
+  return "Rp" + angka.toLocaleString("id-ID");
+};
+
+// Fungsi menyusun objek Tiket lengkap beserta hasil perhitungan harga
+function susunTiket(
+  id: number,
+  nama: string,
+  film: string,
+  jumlah: number,
+  member: boolean,
+  metode: string
+): Tiket {
+  const harga: number = tentukanHarga(film); // harga satuan sesuai film
+  let total: number = harga; // mulai dari harga satuan
+  total *= jumlah; // compound *= : kalikan dengan jumlah tiket
+  const diskon: number = hitungDiskon(total, jumlah, member); // hitung diskon
+  const bayar: number = hitungTotalBayar(total, diskon); // hitung total bayar
+  // kembalikan objek tiket yang sudah lengkap
+  return {
+    id: id,
+    namaPembeli: nama,
+    jenisFilm: film,
+    jumlahTiket: jumlah,
+    statusMember: member,
+    metodePembayaran: metode,
+    totalHarga: total,
+    diskon: diskon,
+    totalBayar: bayar,
+  };
+}
+
+// DELETE (menu 4): menghapus data berdasar id dengan konfirmasi Y/N
+async function hapusData(): Promise<void> {
+  // pesan khusus bila belum ada data
+  if (daftarTiket.length === 0) {
+    console.log("\n[!] Belum ada data reservasi.");
+    return;
+  }
+
+  tampilkanTabel(daftarTiket); // tampilkan data agar pengguna bisa memilih id
+  const id: number = await bacaAngka("\nMasukkan ID yang akan dihapus: ", 0, 999999);
+  const index: number = cariIndexById(id); // cari posisi data
+
+  if (index === -1) {
+    console.log(`[!] Data dengan ID ${id} tidak ditemukan.`);
+  } else {
+    tampilkanDetail(daftarTiket[index]!); // tunjukkan data yang akan dihapus
+    const yakin: boolean = await bacaYaTidak("\nYakin hapus data ini? (Y/N): ");
+    if (yakin) {
+      daftarTiket.splice(index, 1); // splice: buang 1 elemen pada posisi index
+      // nested tingkat 3: pastikan data benar-benar sudah hilang dari array
+      if (cariIndexById(id) === -1) {
+        console.log("[OK] Data berhasil dihapus.");
+      }
+    } else {
+      console.log("Penghapusan dibatalkan.");
+    }
+  }
+}
+
+// SEARCH (menu 5): cari kata kunci nama + filter film + filter member
+async function cariData(): Promise<void> {
+  // pesan khusus bila belum ada data
+  if (daftarTiket.length === 0) {
+    console.log("\n[!] Belum ada data reservasi.");
+    return;
+  }
+
+  console.log("\n--- Cari Data Reservasi ---");
+  // kata kunci diubah ke huruf kecil agar pencarian tidak sensitif huruf besar/kecil
+  const kunci: string = (await rl.question("Kata kunci nama pembeli (Enter = semua): ")).trim().toLowerCase();
+
+  console.log("Filter film   : 0. Semua  1. Action  2. Comedy  3. Horror");
+  const pilFilm: number = await bacaAngka("Pilih filter film (0-3): ", 0, 3);
+  console.log("Filter member : 0. Semua  1. Member  2. Bukan Member");
+  const pilMember: number = await bacaAngka("Pilih filter member (0-2): ", 0, 2);
+
+  // daftar nama film; index 0 kosong karena 0 berarti "semua"
+  const namaFilm: string[] = ["", "Action", "Comedy", "Horror"];
+
+  // filter: ambil hanya tiket yang cocok dengan kata kunci dan kedua filter
+  const hasil: Tiket[] = daftarTiket.filter((t) => {
+    const cocokKunci: boolean = kunci === "" || t.namaPembeli.toLowerCase().includes(kunci);
+    const cocokFilm: boolean = pilFilm === 0 || t.jenisFilm === namaFilm[pilFilm];
+    const cocokMember: boolean = pilMember === 0 || (pilMember === 1 && t.statusMember) || (pilMember === 2 && !t.statusMember);
+    return cocokKunci && cocokFilm && cocokMember; // harus cocok semuanya
+  });
+
+  // tampilkan jumlah hasil, atau pesan bila tidak ada yang cocok
+  if (hasil.length > 0) {
+    console.log(`\nDitemukan ${hasil.length} data:`);
+    tampilkanTabel(hasil);
+  } else {
+    console.log("\n[!] Data tidak ditemukan.");
+  }
+}
+
+// Memulai program (flowchart: Start)
+main();
